@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>IG Hidden Mentions</title>
+    <link rel="stylesheet" href="popup.css" />
+  </head>
+  <body>
+    <main class="app">
+      <header class="header">
+        <div>
+          <p class="eyebrow">Instagram Story helper</p>
+          <h1>Hidden mentions</h1>
+        </div>
+        <span class="badge" id="countBadge">0</span>
+      </header>
+
+      <p class="hint">Open an Instagram Story, then scan the current tab.</p>
+
+      <button id="scanButton" type="button">Scan current Story</button>
+
+      <section class="status" id="status" aria-live="polite">Ready.</section>
+      <ul class="results" id="results"></ul>
+
+      <footer>
+        <span>Local only · no data is uploaded</span>
+      </footer>
+    </main>
+    <script src="popup.js"></script>
+  </body>
+</html>
