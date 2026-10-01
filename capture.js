@@ -15,6 +15,7 @@
     lastLocation = location.href;
     window.__IG_HIDDEN_MENTIONS_STORY_KEY__ = lastLocation;
     window.__IG_HIDDEN_MENTIONS_RESPONSES__ = [];
+    window.__IG_HIDDEN_MENTIONS_LAST_RESULT__ = null;
   };
 
   const originalPushState = history.pushState;
