@@ -16,7 +16,7 @@ async function scanCurrentTab() {
       throw new Error('Open Instagram in the active tab first.');
     }
 
-    statusEl.textContent = 'Scanning page data…';
+    statusEl.textContent = 'Scanning captured Story data…';
 
     const [{ result }] = await chrome.scripting.executeScript({
       target: { tabId: tab.id },
@@ -26,18 +26,17 @@ async function scanCurrentTab() {
 
     const mentions = Array.isArray(result?.mentions) ? result.mentions : [];
     renderResults(mentions);
-
     countBadge.textContent = String(mentions.length);
 
     if (mentions.length) {
       statusEl.textContent =
         `Found ${mentions.length} unique mention${mentions.length === 1 ? '' : 's'}.`;
-    } else if (result?.markerCount > 0) {
-      statusEl.textContent =
-        `Found ${result.markerCount} ig_mention marker${result.markerCount === 1 ? '' : 's'}, but no username nearby. Open an issue with a redacted source sample.`;
     } else if (!result?.captureActive) {
       statusEl.textContent =
-        'Network capture is not active yet. Reload the Instagram tab, reopen the Story, then scan again.';
+        'Capture is not active. Reload Instagram, reopen the Story, then scan again.';
+    } else if (result?.markerCount > 0) {
+      statusEl.textContent =
+        `Found ${result.markerCount} ig_mention marker${result.markerCount === 1 ? '' : 's'}, but no username nearby.`;
     } else {
       statusEl.textContent =
         'No ig_mention markers captured. Reopen or advance to the Story, wait a moment, then scan again.';
@@ -59,7 +58,7 @@ function renderResults(mentions) {
   if (!mentions.length) {
     const item = document.createElement('li');
     item.className = 'empty';
-    item.textContent = 'Nothing detected. Try while the Story is open and fully loaded.';
+    item.textContent = 'Nothing detected.';
     resultsEl.appendChild(item);
     return;
   }
@@ -88,118 +87,73 @@ function setBusy(isBusy) {
   scanButton.textContent = isBusy ? 'Scanning…' : 'Scan current Story';
 }
 
-async function scanInstagramPage() {
+function scanInstagramPage() {
   const found = new Map();
   let markerCount = 0;
 
+  const cleanUsername = (value) => {
+    if (typeof value !== 'string') return '';
+
+    return value
+      .replace(/\\u005f/gi, '_')
+      .replace(/\\_/g, '_')
+      .replace(/\\u002e/gi, '.')
+      .replace(/\\\//g, '/')
+      .replace(/\\(["'\\])/g, '$1')
+      .trim()
+      .replace(/^@+/, '');
+  };
+
   const add = (username, source) => {
-    if (typeof username !== 'string') return;
-
-    const cleaned = username.trim().replace(/^@+/, '');
-
+    const cleaned = cleanUsername(username);
     if (!/^[A-Za-z0-9._]{1,30}$/.test(cleaned)) return;
 
     const key = cleaned.toLowerCase();
     if (!found.has(key)) found.set(key, { username: cleaned, source });
   };
 
-  const normalise = (value) => {
-    if (typeof value !== 'string') return '';
+  const scanText = (text, source) => {
+    if (typeof text !== 'string' || !text.includes('ig_mention')) return;
 
-    let text = value
-      .replace(/&quot;/gi, '"')
-      .replace(/&#34;/gi, '"')
-      .replace(/&#x22;/gi, '"');
-
-    for (let pass = 0; pass < 3; pass += 1) {
-      const previous = text;
-      text = text
-        .replace(/\\u0022/gi, '"')
-        .replace(/\\u0027/gi, "'")
-        .replace(/\\u002F/gi, '/')
-        .replace(/\\u003A/gi, ':')
-        .replace(/\\u002E/gi, '.')
-        .replace(/\\u005F/gi, '_')\n        .replace(/\\_/g, '_')
-        .replace(/\\(["'\\/])/g, '$1');
-
-      if (text === previous) break;
-    }
-
-    return text;
-  };
-
-  const scanText = (raw, source) => {
-    if (!raw || typeof raw !== 'string' || !/ig_mention/i.test(raw)) return;
-
-    const text = normalise(raw);
     const markerPattern = /ig_mention/gi;
     let marker;
 
     while ((marker = markerPattern.exec(text)) !== null) {
       markerCount += 1;
 
-      const after = text.slice(marker.index, marker.index + 2200);
-      const before = text.slice(Math.max(0, marker.index - 700), marker.index);
+      const fragment = text
+        .slice(marker.index, marker.index + 1400)
+        .replace(/&quot;/gi, '"')
+        .replace(/\\u0022/gi, '"')
+        .replace(/\\(["'\\/])/g, '$1');
 
-      const afterPatterns = [
-        /ig_mention[\s\S]{0,1600}?"username"\s*:\s*"([A-Za-z0-9._]{1,30})"/i,
-        /ig_mention[\s\S]{0,1600}?username\s*[:=]\s*"([A-Za-z0-9._]{1,30})"/i,
-        /ig_mention[\s\S]{0,1600}?username\\?"?\s*[:=]\s*\\?"([A-Za-z0-9._]{1,30})/i
-      ];
+      const usernameMatch = fragment.match(
+        /["']?username["']?\s*:\s*["']((?:\\.|[^"'\\]){1,100})["']/i
+      );
 
-      let matched = false;
-      for (const pattern of afterPatterns) {
-        const hit = after.match(pattern);
-        if (hit) {
-          add(hit[1], source);
-          matched = true;
-          break;
-        }
-      }
-
-      if (!matched) {
-        const beforeMatches = [
-          ...before.matchAll(/"username"\s*:\s*"([A-Za-z0-9._]{1,30})"/gi)
-        ];
-        const nearest = beforeMatches.at(-1);
-        if (nearest) add(nearest[1], source);
-      }
+      if (usernameMatch) add(usernameMatch[1], source);
     }
   };
 
-  const capturedResponses = Array.isArray(window.__IG_HIDDEN_MENTIONS_RESPONSES__)
+  const captured = Array.isArray(window.__IG_HIDDEN_MENTIONS_RESPONSES__)
     ? window.__IG_HIDDEN_MENTIONS_RESPONSES__
     : [];
 
-  for (const captured of capturedResponses) {
-    scanText(captured?.text || '', captured?.source || 'network');
+  for (const entry of captured) {
+    scanText(entry?.text || '', entry?.source || 'captured source');
   }
 
-  scanText(document.documentElement?.innerHTML || '', 'DOM');
-
-  for (const script of document.scripts) {
-    scanText(script.textContent || '', 'script');
-  }
-
-  try {
-    const response = await fetch(location.href, {
-      method: 'GET',
-      credentials: 'include',
-      cache: 'no-store',
-      redirect: 'follow'
-    });
-
-    if (response.ok) {
-      scanText(await response.text(), 'page source');
+  if (!captured.length) {
+    for (const script of document.scripts) {
+      if ((script.textContent || '').includes('ig_mention')) {
+        scanText(script.textContent, 'current script');
+      }
     }
-  } catch (_) {
-    // The DOM and inline scripts may still contain the data.
   }
 
   return {
-    url: location.href,
     captureActive: Boolean(window.__IG_HIDDEN_MENTIONS_CAPTURE_ACTIVE__),
-    capturedResponseCount: capturedResponses.length,
+    capturedResponseCount: captured.length,
     markerCount,
     mentions: [...found.values()].sort((a, b) =>
       a.username.localeCompare(b.username)
