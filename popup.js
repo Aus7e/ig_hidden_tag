@@ -119,7 +119,7 @@ async function scanInstagramPage() {
         .replace(/\\u002F/gi, '/')
         .replace(/\\u003A/gi, ':')
         .replace(/\\u002E/gi, '.')
-        .replace(/\\u005F/gi, '_')
+        .replace(/\\u005F/gi, '_')\n        .replace(/\\_/g, '_')
         .replace(/\\(["'\\/])/g, '$1');
 
       if (text === previous) break;
