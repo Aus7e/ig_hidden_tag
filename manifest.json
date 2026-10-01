@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "IG Hidden Mentions",
-  "version": "0.3.1",
+  "version": "0.3.2",
   "description": "Shows Instagram Story mentions that are present in locally loaded page data.",
   "permissions": ["activeTab", "scripting"],
   "host_permissions": ["https://www.instagram.com/*"],
