@@ -4,11 +4,11 @@
   window.__IG_HIDDEN_MENTIONS_CAPTURE_ACTIVE__ = true;
   window.__IG_HIDDEN_MENTIONS_RESPONSES__ = [];
 
-  const MAX_RESPONSES = 30;
+  const MAX_RESPONSES = 12;
   const MAX_RESPONSE_LENGTH = 3_000_000;
 
   const remember = (text, source) => {
-    if (typeof text !== 'string' || !/ig_mention/i.test(text)) return;
+    if (typeof text !== 'string' || !text.includes('ig_mention')) return;
 
     const value = text.slice(0, MAX_RESPONSE_LENGTH);
     const alreadyStored = window.__IG_HIDDEN_MENTIONS_RESPONSES__.some(
@@ -27,8 +27,11 @@
   const inspectNode = (node) => {
     if (!node) return;
 
-    if (node.nodeType === Node.TEXT_NODE) {
-      remember(node.textContent || '', 'initial page source');
+    if (
+      node.nodeType === Node.TEXT_NODE &&
+      node.parentElement?.tagName === 'SCRIPT'
+    ) {
+      remember(node.parentElement.textContent || '', 'initial script');
       return;
     }
 
@@ -36,6 +39,7 @@
 
     if (node.tagName === 'SCRIPT') {
       remember(node.textContent || '', 'initial script');
+      return;
     }
 
     for (const script of node.querySelectorAll?.('script') || []) {
@@ -49,10 +53,8 @@
     }
   });
 
-  observer.observe(document, {
-    childList: true,
-    subtree: true
-  });
+  observer.observe(document, { childList: true, subtree: true });
+  window.setTimeout(() => observer.disconnect(), 15_000);
 
   document.addEventListener(
     'DOMContentLoaded',
