@@ -1,9 +1,18 @@
 {
   "manifest_version": 3,
   "name": "IG Hidden Mentions",
-  "version": "0.2.0",
-  "description": "Shows Instagram Story mentions that are present in the page data, including mentions not visibly rendered on the Story.",
+  "version": "0.3.0",
+  "description": "Shows Instagram Story mentions that are present in locally loaded page data.",
   "permissions": ["activeTab", "scripting"],
+  "host_permissions": ["https://www.instagram.com/*"],
+  "content_scripts": [
+    {
+      "matches": ["https://www.instagram.com/*"],
+      "js": ["capture.js"],
+      "run_at": "document_start",
+      "world": "MAIN"
+    }
+  ],
   "action": {
     "default_popup": "popup.html",
     "default_title": "IG Hidden Mentions"
