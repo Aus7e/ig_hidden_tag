@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "IG Hidden Mentions",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Shows Instagram Story mentions that are present in the page data, including mentions not visibly rendered on the Story.",
   "permissions": ["activeTab", "scripting"],
   "action": {
