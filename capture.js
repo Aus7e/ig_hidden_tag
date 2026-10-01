@@ -3,9 +3,36 @@
 
   window.__IG_HIDDEN_MENTIONS_CAPTURE_ACTIVE__ = true;
   window.__IG_HIDDEN_MENTIONS_RESPONSES__ = [];
+  window.__IG_HIDDEN_MENTIONS_STORY_KEY__ = location.href;
 
   const MAX_RESPONSES = 12;
   const MAX_RESPONSE_LENGTH = 3_000_000;
+  let lastLocation = location.href;
+
+  const onStoryChange = () => {
+    if (location.href === lastLocation) return;
+
+    lastLocation = location.href;
+    window.__IG_HIDDEN_MENTIONS_STORY_KEY__ = lastLocation;
+    window.__IG_HIDDEN_MENTIONS_RESPONSES__ = [];
+  };
+
+  const originalPushState = history.pushState;
+  history.pushState = function (...args) {
+    const result = originalPushState.apply(this, args);
+    onStoryChange();
+    return result;
+  };
+
+  const originalReplaceState = history.replaceState;
+  history.replaceState = function (...args) {
+    const result = originalReplaceState.apply(this, args);
+    onStoryChange();
+    return result;
+  };
+
+  window.addEventListener('popstate', onStoryChange);
+  window.setInterval(onStoryChange, 300);
 
   const remember = (text, source) => {
     if (typeof text !== 'string' || !text.includes('ig_mention')) return;
@@ -16,7 +43,11 @@
     );
 
     if (!alreadyStored) {
-      window.__IG_HIDDEN_MENTIONS_RESPONSES__.push({ source, text: value });
+      window.__IG_HIDDEN_MENTIONS_RESPONSES__.push({
+        source,
+        text: value,
+        storyKey: window.__IG_HIDDEN_MENTIONS_STORY_KEY__
+      });
     }
 
     if (window.__IG_HIDDEN_MENTIONS_RESPONSES__.length > MAX_RESPONSES) {
