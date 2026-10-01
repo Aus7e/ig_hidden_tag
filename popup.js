@@ -20,6 +20,7 @@ async function scanCurrentTab() {
 
     const [{ result }] = await chrome.scripting.executeScript({
       target: { tabId: tab.id },
+      world: 'MAIN',
       func: scanInstagramPage
     });
 
@@ -34,9 +35,12 @@ async function scanCurrentTab() {
     } else if (result?.markerCount > 0) {
       statusEl.textContent =
         `Found ${result.markerCount} ig_mention marker${result.markerCount === 1 ? '' : 's'}, but no username nearby. Open an issue with a redacted source sample.`;
+    } else if (!result?.captureActive) {
+      statusEl.textContent =
+        'Network capture is not active yet. Reload the Instagram tab, reopen the Story, then scan again.';
     } else {
       statusEl.textContent =
-        'No ig_mention markers found. Keep the Story open and fully loaded, then scan again.';
+        'No ig_mention markers captured. Reopen or advance to the Story, wait a moment, then scan again.';
     }
   } catch (error) {
     statusEl.textContent = error?.message || 'Scan failed.';
@@ -163,6 +167,14 @@ async function scanInstagramPage() {
     }
   };
 
+  const capturedResponses = Array.isArray(window.__IG_HIDDEN_MENTIONS_RESPONSES__)
+    ? window.__IG_HIDDEN_MENTIONS_RESPONSES__
+    : [];
+
+  for (const captured of capturedResponses) {
+    scanText(captured?.text || '', captured?.source || 'network');
+  }
+
   scanText(document.documentElement?.innerHTML || '', 'DOM');
 
   for (const script of document.scripts) {
@@ -186,6 +198,8 @@ async function scanInstagramPage() {
 
   return {
     url: location.href,
+    captureActive: Boolean(window.__IG_HIDDEN_MENTIONS_CAPTURE_ACTIVE__),
+    capturedResponseCount: capturedResponses.length,
     markerCount,
     mentions: [...found.values()].sort((a, b) =>
       a.username.localeCompare(b.username)
