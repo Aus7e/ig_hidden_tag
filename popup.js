@@ -3,20 +3,31 @@ const statusEl = document.getElementById('status');
 const resultsEl = document.getElementById('results');
 const countBadge = document.getElementById('countBadge');
 
-scanButton.addEventListener('click', scanCurrentTab);
+let lastStoryKey = null;
+let scanInProgress = false;
 
-async function scanCurrentTab() {
-  setBusy(true);
-  clearResults();
+scanButton.addEventListener('click', () => scanCurrentTab(true));
+
+window.setTimeout(() => scanCurrentTab(false), 250);
+window.setInterval(() => scanCurrentTab(false), 800);
+
+async function scanCurrentTab(force) {
+  if (scanInProgress) return;
+  scanInProgress = true;
+
+  if (force) setBusy(true);
 
   try {
     const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
 
     if (!tab?.id || !tab.url?.startsWith('https://www.instagram.com/')) {
-      throw new Error('Open Instagram in the active tab first.');
+      if (force || lastStoryKey !== null) {
+        lastStoryKey = null;
+        clearResults();
+        statusEl.textContent = 'Open an Instagram Story in the active tab.';
+      }
+      return;
     }
-
-    statusEl.textContent = 'Scanning captured Story data…';
 
     const [{ result }] = await chrome.scripting.executeScript({
       target: { tabId: tab.id },
@@ -24,28 +35,39 @@ async function scanCurrentTab() {
       func: scanInstagramPage
     });
 
+    const storyKey = result?.storyKey || tab.url;
+    const storyChanged = storyKey !== lastStoryKey;
+    const hasFreshData = Number(result?.capturedResponseCount || 0) > 0;
+
+    if (!force && !storyChanged && !hasFreshData) return;
+
+    lastStoryKey = storyKey;
+    clearResults();
+
     const mentions = Array.isArray(result?.mentions) ? result.mentions : [];
     renderResults(mentions);
     countBadge.textContent = String(mentions.length);
 
     if (mentions.length) {
       statusEl.textContent =
-        `Found ${mentions.length} unique mention${mentions.length === 1 ? '' : 's'}.`;
+        `Current Story: ${mentions.length} hidden mention${mentions.length === 1 ? '' : 's'}.`;
     } else if (!result?.captureActive) {
       statusEl.textContent =
-        'Capture is not active. Reload Instagram, reopen the Story, then scan again.';
+        'Capture is not active. Reload Instagram, then reopen the Story.';
     } else if (result?.markerCount > 0) {
       statusEl.textContent =
-        `Found ${result.markerCount} ig_mention marker${result.markerCount === 1 ? '' : 's'}, but no username nearby.`;
+        'Mention data was found, but its username format was not recognised.';
     } else {
-      statusEl.textContent =
-        'No ig_mention markers captured. Reopen or advance to the Story, wait a moment, then scan again.';
+      statusEl.textContent = 'Current Story: no hidden mentions detected.';
     }
   } catch (error) {
-    statusEl.textContent = error?.message || 'Scan failed.';
-    countBadge.textContent = '0';
+    if (force) {
+      clearResults();
+      statusEl.textContent = error?.message || 'Scan failed.';
+    }
   } finally {
-    setBusy(false);
+    scanInProgress = false;
+    if (force) setBusy(false);
   }
 }
 
@@ -58,7 +80,7 @@ function renderResults(mentions) {
   if (!mentions.length) {
     const item = document.createElement('li');
     item.className = 'empty';
-    item.textContent = 'Nothing detected.';
+    item.textContent = 'No hidden mentions in this Story.';
     resultsEl.appendChild(item);
     return;
   }
@@ -75,7 +97,7 @@ function renderResults(mentions) {
 
     const source = document.createElement('span');
     source.className = 'source';
-    source.textContent = mention.source || 'page';
+    source.textContent = mention.source || 'Story';
 
     li.append(link, source);
     resultsEl.appendChild(li);
@@ -84,12 +106,14 @@ function renderResults(mentions) {
 
 function setBusy(isBusy) {
   scanButton.disabled = isBusy;
-  scanButton.textContent = isBusy ? 'Scanning…' : 'Scan current Story';
+  scanButton.textContent = isBusy ? 'Scanning…' : 'Scan now';
 }
 
 function scanInstagramPage() {
   const found = new Map();
   let markerCount = 0;
+  const storyKey =
+    window.__IG_HIDDEN_MENTIONS_STORY_KEY__ || location.href;
 
   const cleanUsername = (value) => {
     if (typeof value !== 'string') return '';
@@ -135,33 +159,39 @@ function scanInstagramPage() {
     }
   };
 
-  const captured = Array.isArray(window.__IG_HIDDEN_MENTIONS_RESPONSES__)
+  const allCaptured = Array.isArray(window.__IG_HIDDEN_MENTIONS_RESPONSES__)
     ? window.__IG_HIDDEN_MENTIONS_RESPONSES__
     : [];
+
+  const captured = allCaptured.filter(
+    (entry) => !entry?.storyKey || entry.storyKey === storyKey
+  );
 
   for (const entry of captured) {
     scanText(entry?.text || '', entry?.source || 'captured source');
   }
 
-  if (!captured.length) {
-    for (const script of document.scripts) {
-      if ((script.textContent || '').includes('ig_mention')) {
-        scanText(script.textContent, 'current script');
-      }
-    }
-  }
-
-  const mentions = [...found.values()].sort((a, b) =>
+  let mentions = [...found.values()].sort((a, b) =>
     a.username.localeCompare(b.username)
   );
 
-  // Each captured response belongs to the scan that consumes it.
-  // New Story responses will be collected in a fresh array.
   if (captured.length) {
+    window.__IG_HIDDEN_MENTIONS_LAST_RESULT__ = {
+      storyKey,
+      markerCount,
+      mentions
+    };
     window.__IG_HIDDEN_MENTIONS_RESPONSES__ = [];
+  } else {
+    const cached = window.__IG_HIDDEN_MENTIONS_LAST_RESULT__;
+    if (cached?.storyKey === storyKey) {
+      markerCount = cached.markerCount || 0;
+      mentions = Array.isArray(cached.mentions) ? cached.mentions : [];
+    }
   }
 
   return {
+    storyKey,
     captureActive: Boolean(window.__IG_HIDDEN_MENTIONS_CAPTURE_ACTIVE__),
     capturedResponseCount: captured.length,
     markerCount,
