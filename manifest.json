@@ -1,10 +1,13 @@
 {
   "manifest_version": 3,
   "name": "IG Hidden Mentions",
-  "version": "0.3.2",
-  "description": "Shows Instagram Story mentions that are present in locally loaded page data.",
-  "permissions": ["activeTab", "scripting"],
+  "version": "0.4.0",
+  "description": "Automatically shows Instagram Story mentions present in locally loaded page data.",
+  "permissions": ["activeTab", "scripting", "sidePanel"],
   "host_permissions": ["https://www.instagram.com/*"],
+  "background": {
+    "service_worker": "service-worker.js"
+  },
   "content_scripts": [
     {
       "matches": ["https://www.instagram.com/*"],
@@ -13,8 +16,10 @@
       "world": "MAIN"
     }
   ],
+  "side_panel": {
+    "default_path": "popup.html"
+  },
   "action": {
-    "default_popup": "popup.html",
-    "default_title": "IG Hidden Mentions"
+    "default_title": "Open IG Hidden Mentions"
   }
 }
