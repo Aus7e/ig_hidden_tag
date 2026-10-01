@@ -151,12 +151,20 @@ function scanInstagramPage() {
     }
   }
 
+  const mentions = [...found.values()].sort((a, b) =>
+    a.username.localeCompare(b.username)
+  );
+
+  // Each captured response belongs to the scan that consumes it.
+  // New Story responses will be collected in a fresh array.
+  if (captured.length) {
+    window.__IG_HIDDEN_MENTIONS_RESPONSES__ = [];
+  }
+
   return {
     captureActive: Boolean(window.__IG_HIDDEN_MENTIONS_CAPTURE_ACTIVE__),
     capturedResponseCount: captured.length,
     markerCount,
-    mentions: [...found.values()].sort((a, b) =>
-      a.username.localeCompare(b.username)
-    )
+    mentions
   };
 }
